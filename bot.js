@@ -12,6 +12,7 @@ const SMM_API_KEY = process.env.SMM_API_KEY;
 const ADMIN_ID = String(process.env.ADMIN_ID || "").trim();
 const DATABASE_URL = process.env.DATABASE_URL;
 const PORT = Number(process.env.PORT) || 10000;
+const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_URL;
 
 if (!BOT_TOKEN) throw new Error("BOT_TOKEN is missing.");
 if (!SMM_API_KEY) console.warn("WARNING: SMM_API_KEY is missing.");
@@ -1115,8 +1116,15 @@ const server = http.createServer((req, res) => {
   if (req.method === "GET" && req.url === "/") { res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" }); return res.end("Trusted BAZAAR Telegram SMM Bot is running."); }
   if (req.method === "GET" && req.url === "/health") { res.writeHead(200, { "Content-Type": "application/json" }); return res.end(JSON.stringify({ ok: true, database: Boolean(pool), webhookPath, adminConfigured: Boolean(ADMIN_ID), apiConfigured: Boolean(SMM_API_KEY) })); }
   if (req.method === "POST" && req.url === webhookPath) {
-    let raw = ""; req.on("data", chunk => { raw += chunk; if (raw.length > 2 * 1024 * 1024) req.destroy(); });
-    req.on("end", async () => { try { await bot.processUpdate(JSON.parse(raw || "{}")); } catch (e) { console.error("Webhook error:", e.stack || e.message); } res.writeHead(200); res.end("OK"); }); return;
+    const supplied = String(req.headers["x-telegram-bot-api-secret-token"] || "");
+    const expected = Buffer.from(webhookSecret), received = Buffer.from(supplied);
+    if (received.length !== expected.length || !crypto.timingSafeEqual(received, expected)) { res.writeHead(403); return res.end("Forbidden"); }
+    let raw = "";
+    req.on("data", chunk => { raw += chunk; if (raw.length > 2 * 1024 * 1024) req.destroy(); });
+    req.on("end", async () => {
+      try { await bot.processUpdate(JSON.parse(raw || "{}")); res.writeHead(200); res.end("OK"); }
+      catch (e) { console.error("Webhook error:", e.stack || e.message); res.writeHead(500); res.end("Error"); }
+    }); return;
   }
   res.writeHead(404); res.end("Not found");
 });
@@ -1127,19 +1135,19 @@ async function start() {
     server.listen(PORT, "0.0.0.0", async () => {
       console.log(`Listening on 0.0.0.0:${PORT}`);
       try {
-        // Use long polling instead of Render webhook. This avoids webhook routing/proxy issues
-        // and makes Telegram updates reach the message/callback handlers directly.
-        await bot.deleteWebHook({ drop_pending_updates: false });
-        await bot.startPolling({
-          restart: true,
-          params: { timeout: 25, allowed_updates: ['message', 'callback_query'] }
+        if (!PUBLIC_URL || !/^https:\/\//.test(PUBLIC_URL)) throw new Error("A public HTTPS URL is required (RENDER_EXTERNAL_URL or PUBLIC_URL).");
+        const webhookUrl = `${PUBLIC_URL.replace(/\/$/, "")}${webhookPath}`;
+        await bot.setWebHook(webhookUrl, {
+          secret_token: webhookSecret,
+          allowed_updates: ['message', 'callback_query'],
+          drop_pending_updates: false
         });
-        console.log('Telegram long polling started successfully.');
+        console.log('Telegram webhook registered successfully.');
         // Check provider statuses every 60 seconds so customers see 'Completed' automatically.
         setInterval(() => { syncOrderStatuses().catch(err => console.error('Order status sync error:', err.message)); }, 60000);
         setTimeout(() => { syncOrderStatuses().catch(err => console.error('Initial order status sync error:', err.message)); }, 5000);
       } catch (e) {
-        console.error('Telegram polling startup failed:', e.response?.body || e.message);
+        console.error('Telegram webhook startup failed:', e.response?.body || e.message);
       }
     });
   } catch (e) { console.error("Startup failed:", e.stack || e.message); process.exit(1); }
@@ -1147,5 +1155,5 @@ async function start() {
 bot.on('polling_error', (err) => console.error('Telegram polling error:', err.response?.body || err.message));
 bot.on('error', (err) => console.error('Telegram bot error:', err.message));
 
-process.on("SIGTERM", async () => { try { await bot.stopPolling(); } catch (_) {} try { await bot.deleteWebHook(); } catch (_) {} try { if (pool) await pool.end(); } catch (_) {} server.close(() => process.exit(0)); });
+process.on("SIGTERM", async () => { try { if (pool) await pool.end(); } catch (_) {} server.close(() => process.exit(0)); });
 start();

@@ -9,6 +9,11 @@
 
 Start command: `node bot.js`
 
+## Render Free web service and Telegram updates
+This version registers a Telegram HTTPS webhook instead of long polling. Render supplies `RENDER_EXTERNAL_URL` automatically for a Web Service. If hosting elsewhere, set `PUBLIC_URL=https://your-public-domain.example`; the URL must be publicly reachable over HTTPS. Keep one deployed bot instance for each bot token. Do not configure a second webhook or polling worker for the same bot. The webhook uses Telegram's secret-token header.
+
+Render Free web services spin down after idle time. A Telegram message sends an incoming webhook request that wakes the service, but the first reply after sleep can be delayed while Render starts it. Check Render logs for `Telegram webhook registered successfully.` and `Startup failed` if messages still fail. PostgreSQL remains the store for balances and orders. Render Free PostgreSQL expires after 30 days unless upgraded.
+
 ## IMPORTANT: Persistent data
 Customer balances, deposits, orders, services, prices, payment numbers, users, and referral data are stored in PostgreSQL (`DATABASE_URL`). The bot now refuses to start if `DATABASE_URL` is missing, so a redeploy cannot silently start with empty temporary data.
 
