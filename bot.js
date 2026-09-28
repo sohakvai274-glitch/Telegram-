@@ -927,7 +927,7 @@ bot.on('message', async msg => {
     }
     if (action === 'balance') {
       clearState(uid);
-      return await bot.sendMessage(chatId, localized(uid, `💰 আপনার ব্যালেন্স\n\n৳${money(getBalance(uid))}`, `💰 Your Balance\n\n৳${money(getBalance(uid))}`), { reply_markup: customerKeyboard(uid) });
+      return await bot.sendMessage(chatId, localized(uid, `💰 আপনার ব্যালেন্স\n\n🇧🇩 BDT: ৳${money(getBalance(uid))}\n💵 USD: $${usdToBdt() ? money(getBalance(uid) / usdToBdt()) : '0.00'}`, `💰 Your Balance\n\n🇧🇩 BDT: ৳${money(getBalance(uid))}\n💵 USD: $${usdToBdt() ? money(getBalance(uid) / usdToBdt()) : '0.00'}`), { reply_markup: customerKeyboard(uid) });
     }
     if (action === 'account details') {
       clearState(uid);
