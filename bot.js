@@ -48,6 +48,7 @@ const SERVICE_CATEGORIES = [
 const defaultDb = () => ({
   serviceIds: [...DEFAULT_SERVICE_IDS],
   prices: {},
+  usdToBdt: null,
   paymentNumbers: [],
   paymentMethods: { "বিকাশ": "", "নগদ": "", "বাইন্সাস": "" },
   managerPaymentMethods: {},
@@ -157,6 +158,26 @@ async function notifyOwner(message, options) {
   catch (e) { console.error(`Owner notification failed:`, e.response?.body || e.message); }
 }
 function money(n) { return Number(n || 0).toFixed(2); }
+function usdToBdt() {
+  const saved = Number(db.usdToBdt);
+  const initial = Number(process.env.USD_TO_BDT);
+  const rate = Number.isFinite(saved) && saved > 0 ? saved : initial;
+  return Number.isFinite(rate) && rate > 0 ? rate : null;
+}
+function servicePriceBdt(service) {
+  const id = String(service.service ?? service.id ?? "");
+  const custom = db.prices[id];
+  return custom !== undefined ? Number(custom) : Number(service.rate || 0) * usdToBdt();
+}
+function dualPrice(bdt) {
+  const rate = usdToBdt();
+  return rate ? `৳${money(bdt)} / $${money(Number(bdt) / rate)}` : `৳${money(bdt)}`;
+}
+function rateRequired(chatId) {
+  if (usdToBdt()) return false;
+  bot.sendMessage(chatId, localized(chatId, "⚠️ USD → BDT রেট সেট করা হয়নি। Admin Panel থেকে রেট সেট করুন।", "⚠️ USD → BDT rate is not set. Ask the admin to set it."));
+  return true;
+}
 function getBalance(uid) { return Number(db.balances[String(uid)] || 0); }
 function setBalance(uid, amount) { db.balances[String(uid)] = Math.max(0, Number(amount || 0)); }
 
@@ -283,7 +304,8 @@ function adminKeyboard(viewerId) {
     [{ text: "📋 Manage Services" }],
     [{ text: "➕ Add Service ID" }, { text: "➖ Remove Service ID" }],
     [{ text: "💰 Set Price" }, { text: "⬆️ Increase Price" }],
-    [{ text: "⬇️ Decrease Price" }, { text: "💳 Payment Methods" }],
+    [{ text: "⬇️ Decrease Price" }, { text: "💱 USD → BDT" }],
+    [{ text: "💳 Payment Methods" }],
     [{ text: "💳 Payment Requests" }],
     [{ text: "👥 User Count" }],
     [{ text: "👤 Customer Details" }],
@@ -340,6 +362,7 @@ function normalizeButton(text) {
     'set price': 'set price',
     'increase price': 'increase price',
     'decrease price': 'decrease price',
+    'usd bdt': 'usd bdt',
     'payment numbers': 'payment numbers',
     'payment methods': 'payment numbers',
     'change payment number': 'change payment number',
@@ -361,7 +384,7 @@ function selectedServiceInfo(all, serviceId) {
   const s = all.find(x => String(x.service ?? x.id ?? "") === String(serviceId));
   if (!s) return null;
   const providerRate = Number(s.rate || 0);
-  const price = db.prices[String(serviceId)] !== undefined ? Number(db.prices[String(serviceId)]) : providerRate;
+  const price = servicePriceBdt(s);
   return { ...s, id: String(serviceId), providerRate, price };
 }
 
@@ -406,6 +429,7 @@ function categoryKeyboard(groups, callbackPrefix, uid) {
 
 async function sendCustomerServices(chatId) {
   try {
+    if (rateRequired(chatId)) return;
     const groups = await loadSelectedServiceGroups();
     if (!groups.length) return bot.sendMessage(chatId, localized(chatId, "⚠️ আপনার নির্বাচিত কোনো সার্ভিস provider API-তে পাওয়া যায়নি।\n\nAdmin Panel → Manage Services থেকে ID পরীক্ষা করুন।", "⚠️ None of your selected services were found in the provider API.\n\nCheck the IDs in Admin Panel → Manage Services."));
     return bot.sendMessage(chatId, localized(chatId, "📋 Trusted BAZAAR Services\n\nএকটি ক্যাটাগরি নির্বাচন করুন:", "📋 Trusted BAZAAR Services\n\nChoose a category:"), { reply_markup: categoryKeyboard(groups, "browse_cat", chatId) });
@@ -417,6 +441,7 @@ async function sendCustomerServices(chatId) {
 
 async function showCategoryServices(chatId, categoryId) {
   try {
+    if (rateRequired(chatId)) return;
     const groups = await loadSelectedServiceGroups();
     const group = groups.find(item => item.id === categoryId);
     if (!group) return bot.sendMessage(chatId, localized(chatId, "⚠️ এই ক্যাটাগরিতে কোনো সার্ভিস পাওয়া যায়নি।", "⚠️ No services found in this category."));
@@ -425,8 +450,8 @@ async function showCategoryServices(chatId, categoryId) {
     const chunks = [];
     for (const service of group.services) {
       const serviceId = String(service.service ?? service.id);
-      const price = db.prices[serviceId] !== undefined ? Number(db.prices[serviceId]) : Number(service.rate || 0);
-      const line = localized(chatId, `🆔 ${serviceId}\n📌 ${service.name || "সার্ভিস"}\n💰 প্রতি ১K: ৳${money(price)}\n🔢 সর্বনিম্ন: ${service.min ?? "-"} | সর্বোচ্চ: ${service.max ?? "-"}\n\n`, `🆔 ${serviceId}\n📌 ${service.name || "Service"}\n💰 Price/1K: ৳${money(price)}\n🔢 Min: ${service.min ?? "-"} | Max: ${service.max ?? "-"}\n\n`);
+      const price = servicePriceBdt(service);
+      const line = localized(chatId, `🆔 ${serviceId}\n📌 ${service.name || "সার্ভিস"}\n💰 প্রতি ১K: ${dualPrice(price)}\n🔢 সর্বনিম্ন: ${service.min ?? "-"} | সর্বোচ্চ: ${service.max ?? "-"}\n\n`, `🆔 ${serviceId}\n📌 ${service.name || "Service"}\n💰 Price/1K: ${dualPrice(price)}\n🔢 Min: ${service.min ?? "-"} | Max: ${service.max ?? "-"}\n\n`);
       if ((text + line).length > 3500) { chunks.push(text); text = `${label} ${localized(chatId, "সার্ভিস", "Services")} (continued)\n\n`; }
       text += line;
     }
@@ -443,6 +468,7 @@ async function showCategoryServices(chatId, categoryId) {
 
 async function showOrderCategory(chatId, uid, categoryId, page = 0) {
   try {
+    if (rateRequired(chatId)) return;
     const groups = await loadSelectedServiceGroups();
     const group = groups.find(item => item.id === categoryId);
     if (!group) return bot.sendMessage(chatId, localized(chatId, "⚠️ এই ক্যাটাগরিতে কোনো সার্ভিস পাওয়া যায়নি।", "⚠️ No services found in this category."));
@@ -452,8 +478,8 @@ async function showOrderCategory(chatId, uid, categoryId, page = 0) {
     const pageServices = group.services.slice(pageIndex * pageSize, (pageIndex + 1) * pageSize);
     const buttons = pageServices.map(service => {
       const sid = String(service.service ?? service.id);
-      const price = db.prices[sid] !== undefined ? Number(db.prices[sid]) : Number(service.rate || 0);
-      return [{ text: `${sid} • ${String(service.name || "Service").slice(0, 32)} • ৳${money(price)}/1K`, callback_data: `order_service:${sid}` }];
+      const price = servicePriceBdt(service);
+      return [{ text: `${sid} • ${String(service.name || "Service").slice(0, 32)} • ${dualPrice(price)}/1K`, callback_data: `order_service:${sid}` }];
     });
     if (pageCount > 1) {
       const nav = [];
@@ -611,6 +637,7 @@ async function handleAdminAction(id, uid, action) {
   if (action === "set price") { setState(uid, { type: "set_price" }); return bot.sendMessage(id, "💰 Price/1K সেট করুন।\nফরম্যাট: ServiceID Price\nউদাহরণ: 979 150"); }
   if (action === "increase price") { setState(uid, { type: "increase_price" }); return bot.sendMessage(id, "⬆️ কত টাকা/1K বাড়াবেন?\nফরম্যাট: ServiceID Amount\nউদাহরণ: 979 20"); }
   if (action === "decrease price") { setState(uid, { type: "decrease_price" }); return bot.sendMessage(id, "⬇️ কত টাকা/1K কমাবেন?\nফরম্যাট: ServiceID Amount\nউদাহরণ: 979 20"); }
+  if (action === "usd bdt") { setState(uid, { type: "usd_bdt" }); return bot.sendMessage(id, `💱 বর্তমান রেট: ${usdToBdt() ? `1 USD = ৳${money(usdToBdt())}` : "সেট করা হয়নি"}\nনতুন রেট লিখুন, যেমন: 122.50`); }
   if (action === "payment numbers") return showPaymentNumbers(id, uid);
   if (action === "change payment number") { setState(uid, { type: "payment_change" }); return bot.sendMessage(id, "✏️ নতুন payment number দিন。\nএটি বর্তমান payment number list replace করবে。"); }
   if (action === "payment requests") return showPaymentRequests(id, uid);
@@ -668,6 +695,7 @@ async function processReferralStart(msg, startArg) {
 
 async function startNewOrder(chatId, uid) {
   try {
+    if (rateRequired(chatId)) return;
     const groups = await loadSelectedServiceGroups();
     if (!groups.length) return bot.sendMessage(chatId, localized(uid, "⚠️ কোনো সার্ভিস পাওয়া যায়নি। Admin আগে Service ID যোগ করুন।", "⚠️ No services found. Ask the Admin to add service IDs."));
     return bot.sendMessage(chatId, localized(uid, `🛒 নতুন অর্ডার\n\n💰 আপনার ব্যালেন্স: ৳${money(getBalance(uid))}\n\nআগে একটি ক্যাটাগরি নির্বাচন করুন:`, `🛒 New Order\n\n💰 Your balance: ৳${money(getBalance(uid))}\n\nChoose a category first:`), { reply_markup: categoryKeyboard(groups, "order_cat", uid) });
@@ -745,10 +773,11 @@ bot.on("callback_query", async q => {
     }
     if (data.startsWith("order_service:")) {
       const sid = data.split(":")[1];
+      if (rateRequired(chatId)) return;
       const all = await getServices(); const s = selectedServiceInfo(all, sid);
       if (!s) return bot.sendMessage(chatId, localized(uid, "❌ সার্ভিস পাওয়া যায়নি।", "❌ Service not found."));
       setState(uid, { type: "order_link", serviceId: sid, service: s });
-      return bot.sendMessage(chatId, localized(uid, `📌 ${s.name}\n💰 দাম: ৳${money(s.price)}/১K\n🔢 সর্বনিম্ন: ${s.min || "-"} | সর্বোচ্চ: ${s.max || "-"}\n\n🔗 আপনার Link/Username পাঠান:`, `📌 ${s.name}\n💰 Price: ৳${money(s.price)}/1K\n🔢 Min: ${s.min || "-"} | Max: ${s.max || "-"}\n\n🔗 Send your link/username:`));
+      return bot.sendMessage(chatId, localized(uid, `📌 ${s.name}\n💰 দাম: ${dualPrice(s.price)}/১K\n🔢 সর্বনিম্ন: ${s.min || "-"} | সর্বোচ্চ: ${s.max || "-"}\n\n🔗 আপনার Link/Username পাঠান:`, `📌 ${s.name}\n💰 Price: ${dualPrice(s.price)}/1K\n🔢 Min: ${s.min || "-"} | Max: ${s.max || "-"}\n\n🔗 Send your link/username:`));
     }
     if (data.startsWith("deposit_method:")) {
       const parts = data.split(":");
@@ -882,7 +911,7 @@ bot.on('message', async msg => {
     if (isAdmin(uid)) {
       const adminActions = new Set(isOwner(uid) ? [
         'admin panel','manage services','add service id','remove service id','set price',
-        'increase price','decrease price','payment numbers','change payment number',
+        'increase price','decrease price','usd bdt','payment numbers','change payment number',
         'payment requests','user count','customer details','customer menu','manage managers','manager payment summary','support agents'
       ] : ['admin panel','payment numbers','payment requests','customer menu']);
       if (adminActions.has(action)) {
@@ -968,6 +997,12 @@ bot.on('message', async msg => {
       const quantity = Number(text.replace(/,/g, ''));
       const min = Number(state.service.min || 0), max = Number(state.service.max || Number.MAX_SAFE_INTEGER);
       if (!Number.isInteger(quantity) || quantity <= 0 || quantity < min || quantity > max) return await bot.sendMessage(chatId, localized(uid, `⚠️ পরিমাণটি সঠিক নয়। সর্বনিম্ন ${min}, সর্বোচ্চ ${max}।`, `⚠️ Invalid quantity. Minimum ${min}, maximum ${max}.`));
+      if (rateRequired(chatId)) return;
+      const currentPrice = servicePriceBdt({ ...state.service, service: state.serviceId });
+      if (!Number.isFinite(currentPrice) || Math.abs(currentPrice - Number(state.service.price)) > 0.005) {
+        clearState(uid);
+        return await bot.sendMessage(chatId, localized(uid, '⚠️ সার্ভিসের দাম বদলেছে। আবার নতুন অর্ডার থেকে সার্ভিসটি বেছে নিন।', '⚠️ The service price changed. Please start a new order.'));
+      }
       const cost = Number(state.service.price) * quantity / 1000;
       if (getBalance(uid) < cost) {
         clearState(uid);
@@ -1044,6 +1079,14 @@ bot.on('message', async msg => {
         await saveDb(); clearState(uid);
         return await bot.sendMessage(chatId, `✅ ${before - db.serviceIds.length}টি Service ID বাদ দেওয়া হয়েছে।`, { reply_markup: adminKeyboard(chatId) });
       }
+      if (state?.type === 'usd_bdt') {
+        const rate = Number(text);
+        if (!/^\d+(?:\.\d{1,4})?$/.test(text) || !Number.isFinite(rate) || rate < 1 || rate > 10000)
+          return await bot.sendMessage(chatId, 'সঠিক রেট লিখুন, যেমন 122.50 (১–১০,০০০)।');
+        db.usdToBdt = rate;
+        await saveDb(); clearState(uid);
+        return await bot.sendMessage(chatId, `✅ রেট সংরক্ষিত: 1 USD = ৳${money(rate)}। সার্ভিসের দাম এখন ৳ ও $-এ দেখা যাবে।`, { reply_markup: adminKeyboard(chatId) });
+      }
       if (state?.type === 'set_price' || state?.type === 'increase_price' || state?.type === 'decrease_price') {
         const m = text.match(/^(\d+)\s+([0-9]+(?:\.[0-9]+)?)$/);
         if (!m) return await bot.sendMessage(chatId, 'ফরম্যাট:\nServiceID Amount\nউদাহরণ: 979 150');
@@ -1052,7 +1095,7 @@ bot.on('message', async msg => {
         const amount = Number(m[2]);
         let base = Number(db.prices[serviceId]);
         if (!Number.isFinite(base)) {
-          try { const all = await getServices(); const ss = selectedServiceInfo(all, serviceId); base = Number(ss?.providerRate || 0); } catch (_) { base = 0; }
+          try { const all = await getServices(); const ss = selectedServiceInfo(all, serviceId); base = Number(ss?.price || 0); } catch (_) { base = 0; }
         }
         if (state.type === 'set_price') db.prices[serviceId] = amount;
         else db.prices[serviceId] = state.type === 'increase_price' ? base + amount : Math.max(0, base - amount);

@@ -6,8 +6,12 @@
 - ADMIN_ID
 - DATABASE_URL
 - SMM_API_URL=https://my.smmsun.com/api/v2
+- USD_TO_BDT (optional initial rate, for example `122.50`; the owner can set it from Admin Panel)
 
 Start command: `node bot.js`
+
+## Service prices in BDT and USD
+Set the exchange rate in Owner Admin Panel → `💱 USD → BDT`. It is stored in PostgreSQL and takes precedence over the optional initial `USD_TO_BDT` environment variable. Customer service lists and order selection show both ৳ and $ per 1,000. `Set Price`, `Increase Price`, and `Decrease Price` accept BDT per 1,000; the USD figure is an approximate display conversion. If a service has no custom price, its provider USD rate is converted to BDT using this rate. Orders and customer balances are charged in BDT. Set a rate before customers browse services or order.
 
 ## Render Free web service and Telegram updates
 This version registers a Telegram HTTPS webhook instead of long polling. Render supplies `RENDER_EXTERNAL_URL` automatically for a Web Service. If hosting elsewhere, set `PUBLIC_URL=https://your-public-domain.example`; the URL must be publicly reachable over HTTPS. Keep one deployed bot instance for each bot token. Do not configure a second webhook or polling worker for the same bot. The webhook uses Telegram's secret-token header.
