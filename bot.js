@@ -56,6 +56,7 @@ const defaultDb = () => ({
   orders: {},
   balances: {},
   deposits: {},
+  balanceAdjustments: [],
   managers: [],
   supportAgents: [],
   referral: { minOrder: 50, commissionRate: 0.10 }
@@ -100,6 +101,7 @@ function normalizeDb() {
   if (!db.orders || typeof db.orders !== "object") db.orders = {};
   if (!db.balances || typeof db.balances !== "object") db.balances = {};
   if (!db.deposits || typeof db.deposits !== "object") db.deposits = {};
+  if (!Array.isArray(db.balanceAdjustments)) db.balanceAdjustments = [];
   if (!Array.isArray(db.managers)) db.managers = [];
   db.managers = [...new Set(db.managers.map(id => String(id).trim()).filter(id => /^\d{5,15}$/.test(id) && id !== ADMIN_ID))];
   if (!Array.isArray(db.supportAgents)) db.supportAgents = [];
@@ -309,6 +311,7 @@ function adminKeyboard(viewerId) {
     [{ text: "💳 Payment Requests" }],
     [{ text: "👥 User Count" }],
     [{ text: "👤 Customer Details" }],
+    [{ text: "➖ Customer Balance" }],
     [{ text: "🔙 Customer Menu" }]
   ];
   if (isOwner(viewerId)) {
@@ -373,6 +376,7 @@ function normalizeButton(text) {
     'ভাষা language': 'language',
     'user count': 'user count',
     'customer details': 'customer details',
+    'customer balance': 'customer balance',
     'account details': 'account details',
     'অ্যাকাউন্ট তথ্য': 'account details',
     'customer menu': 'customer menu'
@@ -648,6 +652,11 @@ async function handleAdminAction(id, uid, action) {
   }
   if (action === "user count") return bot.sendMessage(id, `👥 Registered users: ${Object.keys(db.users).length}`);
   if (action === "customer details") { clearState(uid); return showCustomerList(id); }
+  if (action === "customer balance") {
+    setState(uid, { type: "deduct_balance" });
+    const recent = db.balanceAdjustments.slice(-5).reverse().map(r => `${r.id} • ${r.customerId} • -৳${money(r.amount)} • ${r.createdAt}`).join('\n');
+    return bot.sendMessage(id, `➖ কাস্টমারের ব্যালান্স সংশোধন\n\nফরম্যাট: CustomerID Amount\nউদাহরণ: 123456789 20\n\nশুধু ভুলে বেশি যোগ হওয়া পরিমাণ লিখুন। নিশ্চিত করার আগে কাস্টমারের বর্তমান ব্যালান্স দেখানো হবে।\n\nসাম্প্রতিক সংশোধন:\n${recent || 'এখনো নেই।'}`);
+  }
   if (action === "customer menu") { clearState(uid); return bot.sendMessage(id, "🏠 Customer Menu", { reply_markup: customerKeyboard(uid) }); }
 }
 
@@ -803,6 +812,24 @@ bot.on("callback_query", async q => {
       clearState(uid);
       return bot.sendMessage(chatId, "⚙️ Admin Panel", { reply_markup: adminKeyboard(uid) });
     }
+    if (data.startsWith("balance_deduct:")) {
+      if (!isOwner(uid)) return bot.sendMessage(chatId, "⛔ শুধু Owner ব্যালান্স সংশোধন করতে পারবেন।");
+      const state = getState(uid);
+      if (!state || state.type !== "deduct_confirm" || state.token !== data.slice("balance_deduct:".length) || Date.now() > state.expiresAt)
+        return bot.sendMessage(chatId, "⚠️ এই অনুরোধের মেয়াদ শেষ বা ইতিমধ্যে সম্পন্ন হয়েছে। আবার শুরু করুন।");
+      clearState(uid);
+      if (!db.users[state.customerId]) return bot.sendMessage(chatId, "⚠️ কাস্টমারটি পাওয়া যায়নি।");
+      const before = Math.round(getBalance(state.customerId) * 100);
+      const cents = Math.round(state.amount * 100);
+      if (before < cents) return bot.sendMessage(chatId, `⚠️ ব্যালান্স কম। বর্তমান: ৳${money(before / 100)}; কমাতে চেয়েছেন: ৳${money(state.amount)}।`);
+      setBalance(state.customerId, (before - cents) / 100);
+      const record = { id: `ADJ-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`, customerId: state.customerId, amount: state.amount, before: before / 100, after: (before - cents) / 100, adminId: String(uid), reason: "Correction of over-credited balance", createdAt: new Date().toISOString() };
+      db.balanceAdjustments.push(record);
+      await saveDb();
+      try { await bot.sendMessage(state.customerId, `ℹ️ আপনার ব্যালান্স সংশোধন করা হয়েছে।\nবেশি যোগ হওয়া ৳${money(state.amount)} বাদ দেওয়া হয়েছে।\nবর্তমান ব্যালান্স: ৳${money(record.after)}\nরেফারেন্স: ${record.id}`); }
+      catch (e) { console.error('Balance correction notification failed:', e.message); }
+      return bot.sendMessage(chatId, `✅ ${state.customerId} থেকে ৳${money(state.amount)} কমানো হয়েছে।\nআগে: ৳${money(record.before)}\nএখন: ৳${money(record.after)}\nরেফারেন্স: ${record.id}`, { reply_markup: adminKeyboard(uid) });
+    }
     if (data === "manager_add") {
       if (!isOwner(uid)) return bot.sendMessage(chatId, "⛔ শুধু Owner manager যোগ করতে পারবেন।");
       setState(uid, { type: "manager_add" });
@@ -912,7 +939,7 @@ bot.on('message', async msg => {
       const adminActions = new Set(isOwner(uid) ? [
         'admin panel','manage services','add service id','remove service id','set price',
         'increase price','decrease price','usd bdt','payment numbers','change payment number',
-        'payment requests','user count','customer details','customer menu','manage managers','manager payment summary','support agents'
+        'payment requests','user count','customer details','customer balance','customer menu','manage managers','manager payment summary','support agents'
       ] : ['admin panel','payment numbers','payment requests','customer menu']);
       if (adminActions.has(action)) {
         console.log(`[ADMIN ACTION] uid=${uid} action=${action}`);
@@ -1040,6 +1067,19 @@ bot.on('message', async msg => {
       if (!isOwner(uid) && state && state.type !== 'payment_method_set') {
         clearState(uid);
         return bot.sendMessage(chatId, '⛔ Manager access শুধু পেমেন্ট মেথড ও পেমেন্ট রিকোয়েস্টের জন্য।', { reply_markup: adminKeyboard(uid) });
+      }
+      if (state?.type === 'deduct_balance') {
+        if (!isOwner(uid)) { clearState(uid); return bot.sendMessage(chatId, '⛔ শুধু Owner পারবেন।'); }
+        const match = text.match(/^(\d{5,20})\s+(\d+(?:\.\d{1,2})?)$/);
+        if (!match) return bot.sendMessage(chatId, 'ফরম্যাট: CustomerID Amount\nউদাহরণ: 123456789 20');
+        const customerId = match[1], amount = Number(match[2]);
+        if (!db.users[customerId]) return bot.sendMessage(chatId, '⚠️ এই কাস্টমার বট ব্যবহার করেননি। ID যাচাই করুন।');
+        if (!Number.isFinite(amount) || amount <= 0 || amount > 1000000) return bot.sendMessage(chatId, '⚠️ ০-এর বেশি এবং সর্বোচ্চ ১০,০০,০০০ টাকা দিন।');
+        const before = Math.round(getBalance(customerId) * 100);
+        if (Math.round(amount * 100) > before) return bot.sendMessage(chatId, `⚠️ এত টাকা কমানো যাবে না। বর্তমান ব্যালান্স: ৳${money(before / 100)}`);
+        const token = crypto.randomBytes(8).toString('hex');
+        setState(uid, { type: 'deduct_confirm', customerId, amount, token, expiresAt: Date.now() + 10 * 60 * 1000 });
+        return bot.sendMessage(chatId, `⚠️ নিশ্চিত করুন\nকাস্টমার: ${customerId}\nবর্তমান: ৳${money(before / 100)}\nকমবে: ৳${money(amount)}\nনতুন ব্যালান্স: ৳${money((before - Math.round(amount * 100)) / 100)}`, { reply_markup: { inline_keyboard: [[{ text: '✅ নিশ্চিত করে কমান', callback_data: `balance_deduct:${token}` }, { text: '❌ বাতিল', callback_data: 'admin_panel' }]] } });
       }
       if (state?.type === 'manager_add') {
         if (!isOwner(uid)) { clearState(uid); return bot.sendMessage(chatId, '⛔ শুধু Owner manager যোগ করতে পারবেন।'); }

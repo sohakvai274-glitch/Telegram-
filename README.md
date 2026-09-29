@@ -47,6 +47,7 @@ Do not put BOT_TOKEN or SMM_API_KEY in source code. Keep them in Render Environm
 - New orders also save the service name so future admin history is easier to read.
 
 ## Admin and manager access
+- Owner Admin Panel → `➖ Customer Balance`: enter `CustomerID Amount`, review the current and resulting BDT balance, then confirm. Example: `123456789 20` removes ৳20 of an accidental over-credit. The bot refuses unknown customers, zero/invalid amounts and deductions larger than the current balance. Only the owner can confirm; a correction record with owner ID, before/after balances, amount and timestamp is stored in PostgreSQL. The customer receives a correction notice. This changes the wallet balance only; it does not rewrite the original approved deposit request or manager payment summary.
 - Set `ADMIN_ID` to the owner's numeric Telegram User ID. The owner opens the panel with `/admin` and sees `👥 Manage Managers`.
 - Use `➕ Add Manager`, enter a manager's numeric Telegram User ID, and ask them to open `/admin`. They can get their ID with `/myid`.
 - Each manager has separate bKash, Nagad, and Binance numbers; the owner has a separate set. Customers see which account belongs to the owner or a manager when adding balance.
