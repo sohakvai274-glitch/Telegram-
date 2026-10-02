@@ -48,6 +48,7 @@ const SERVICE_CATEGORIES = [
 const defaultDb = () => ({
   serviceIds: [...DEFAULT_SERVICE_IDS],
   prices: {},
+  managerPrices: {},
   usdToBdt: null,
   paymentNumbers: [],
   paymentMethods: { "বিকাশ": "", "নগদ": "", "বাইন্সাস": "" },
@@ -85,6 +86,7 @@ async function initDb() {
 function normalizeDb() {
   if (!Array.isArray(db.serviceIds)) db.serviceIds = [...DEFAULT_SERVICE_IDS];
   db.serviceIds = db.serviceIds.map(String);
+  if (!db.managerPrices || typeof db.managerPrices !== "object" || Array.isArray(db.managerPrices)) db.managerPrices = {};
   if (!db.prices || typeof db.prices !== "object") db.prices = {};
   if (!Array.isArray(db.paymentNumbers)) db.paymentNumbers = [];
   if (!db.paymentMethods || typeof db.paymentMethods !== "object") db.paymentMethods = { "বিকাশ": "", "নগদ": "", "বাইন্সাস": "" };
@@ -143,12 +145,33 @@ function saveDb() {
 function isOwner(id) { return Boolean(ADMIN_ID) && String(id) === ADMIN_ID; }
 function isManager(id) { return db.managers.includes(String(id)); }
 function isAdmin(id) { return isOwner(id) || isManager(id); }
-function languageOf(id) { return db.users[String(id)]?.language === "en" ? "en" : "bn"; }
-function localized(id, bangla, english) { return languageOf(id) === "en" ? english : bangla; }
+const HINDI_PHRASES = {"Choose your preferred language:": "अपनी पसंद की भाषा चुनें:", "Services": "सेवाएं", "Balance": "बैलेंस", "Add Balance": "बैलेंस जोड़ें", "New Order": "नया ऑर्डर", "My Orders": "मेरे ऑर्डर", "Referral": "रेफरल", "Account Details": "खाते की जानकारी", "Support": "सहायता", "Manager Specials": "मैनेजर विशेष", "Managers only.": "केवल मैनेजरों के लिए।", "No special prices have been set yet.": "अभी विशेष कीमतें तय नहीं की गई हैं।", "Choose a service to order.": "ऑर्डर करने के लिए सेवा चुनें।", "This special order is no longer available.": "यह विशेष ऑर्डर अब उपलब्ध नहीं है।", "Choose an option from the menu below.": "नीचे मेनू से विकल्प चुनें।", "Welcome!": "स्वागत है!", "Choose a category:": "श्रेणी चुनें:", "Choose a category first:": "पहले श्रेणी चुनें:", "Choose a service:": "सेवा चुनें:", "Send your link/username:": "अपना लिंक/यूज़रनेम भेजें:", "Enter quantity.": "संख्या लिखें।", "Send a link.": "लिंक भेजें।", "Enter a valid amount.": "सही राशि लिखें।", "Enter a valid transaction ID.": "सही ट्रांजैक्शन आईडी लिखें।", "Now send your transaction ID/TrxID.": "अब अपना ट्रांजैक्शन आईडी/TrxID भेजें।", "Enter the amount you paid.": "भुगतान की गई राशि लिखें।", "Your balance will be added after the selected payment account owner approves it.": "चुने हुए भुगतान खाते के मालिक की मंज़ूरी के बाद बैलेंस जोड़ा जाएगा।", "Payment request submitted.": "भुगतान अनुरोध भेज दिया गया है।", "Your payment was approved.": "आपका भुगतान मंज़ूर हो गया है।", "Your payment request was rejected.": "आपका भुगतान अनुरोध अस्वीकार कर दिया गया है।", "No Admin or Manager payment methods have been set yet.": "अभी एडमिन या मैनेजर के भुगतान तरीके तय नहीं हैं।", "Choose the number you will pay. Admin and Manager accounts are shown separately:": "भुगतान करने वाला नंबर चुनें। एडमिन और मैनेजर के खाते अलग दिखाए गए हैं:", "This payment method is no longer available. Choose another number from Add Balance.": "यह भुगतान तरीका अब उपलब्ध नहीं है। बैलेंस जोड़ें से दूसरा नंबर चुनें।", "This Manager payment account is no longer active.": "यह मैनेजर भुगतान खाता अब सक्रिय नहीं है।", "This payment method has not been set yet.": "यह भुगतान तरीका अभी तय नहीं है।", "Order submitted successfully!": "ऑर्डर सफलतापूर्वक भेज दिया गया!", "Could not submit the order.": "ऑर्डर नहीं भेजा जा सका।", "Your balance was not charged.": "आपका बैलेंस नहीं काटा गया।", "Insufficient balance.": "बैलेंस पर्याप्त नहीं है।", "Please use": "कृपया उपयोग करें", "first.": "पहले।", "The service price changed. Please start a new order.": "सेवा की कीमत बदल गई है। कृपया नया ऑर्डर शुरू करें।", "Invalid quantity.": "संख्या सही नहीं है।", "Service not found.": "सेवा नहीं मिली।", "No services found. Ask the Admin to add service IDs.": "कोई सेवा नहीं मिली। एडमिन से Service ID जोड़ने को कहें।", "No services found in this category.": "इस श्रेणी में कोई सेवा नहीं मिली।", "Could not load services in this category.": "इस श्रेणी की सेवाएं लोड नहीं हो सकीं।", "Could not load the service list.": "सेवाओं की सूची लोड नहीं हो सकी।", "Could not load services. Check SMM_API_KEY/API URL and Render logs.": "सेवाएं लोड नहीं हो सकीं। SMM_API_KEY/API URL और Render logs जांचें।", "Could not load services.": "सेवाएं लोड नहीं हो सकीं।", "None of your selected services were found in the provider API.": "चुनी गई सेवाएं प्रदाता API में नहीं मिलीं।", "Check the IDs in Admin Panel → Manage Services.": "Admin Panel → Manage Services में ID जांचें।", "USD → BDT rate is not set. Ask the admin to set it.": "USD → BDT दर तय नहीं है। एडमिन से तय करने को कहें।", "You have no orders yet.": "अभी आपका कोई ऑर्डर नहीं है।", "Order completed!": "ऑर्डर पूरा हो गया!", "Referral reward added!": "रेफरल पुरस्कार जोड़ दिया गया!", "Referral Program": "रेफरल कार्यक्रम", "Your referral link:": "आपका रेफरल लिंक:", "Total referrals:": "कुल रेफरल:", "Total commission:": "कुल कमाई:", "You earn ৳5 once when a customer who joined through your link completes their first order of at least ৳": "आपके लिंक से आए ग्राहक का कम से कम ৳", "No support agents": "कोई सहायता एजेंट नहीं", "Not set": "तय नहीं है", "Current Balance": "वर्तमान बैलेंस", "Total Order Value": "ऑर्डर का कुल मूल्य", "Completed Orders": "पूरे हुए ऑर्डर", "Total Orders": "कुल ऑर्डर", "Last Seen": "आखिरी बार सक्रिय", "Joined": "जुड़ने का समय", "User ID": "यूज़र आईडी", "Username": "यूज़रनेम", "Name": "नाम", "Special Price": "विशेष कीमत", "Your Balance": "आपका बैलेंस", "Your balance": "आपका बैलेंस", "New balance": "नया बैलेंस", "Provider Order": "प्रदाता ऑर्डर", "Customer order": "ग्राहक का ऑर्डर", "Required": "ज़रूरी", "Available": "उपलब्ध", "Amount": "राशि", "Number": "नंबर", "Method": "तरीका", "Added": "जोड़ा गया", "Reward": "पुरस्कार", "Price/1K": "कीमत/1K", "Quantity": "संख्या", "Cost": "खर्च", "Status": "स्थिति", "Order": "ऑर्डर", "Service": "सेवा", "Price": "कीमत", "Minimum": "न्यूनतम", "maximum": "अधिकतम", "Max": "अधिकतम", "Min": "न्यूनतम", "Example": "उदाहरण", "Categories": "श्रेणियां", "Previous": "पिछला", "Next": "अगला", "Page": "पृष्ठ", "Completed": "पूरा हुआ", "Pending": "लंबित", "Submitted": "भेजा गया", "Processing": "प्रक्रिया में", "In Progress": "जारी", "Canceled": "रद्द", "Failed": "विफल", "Partial": "आंशिक", "Refunded": "वापस किया गया", "I received:": "मुझे मिला:", "Other Services": "अन्य सेवाएं"};
+Object.assign(HINDI_PHRASES, {
+  "No support agents are available yet.": "अभी कोई सहायता एजेंट उपलब्ध नहीं है।",
+  "Customer Support": "ग्राहक सहायता",
+  "Choose an agent to contact:": "संपर्क करने के लिए एजेंट चुनें:",
+  "बिकাশ": "bKash", "বিকাশ": "bKash", "নগদ": "Nagad", "বাইন্সাস": "Binance"
+});
+const HINDI_KEYS = Object.keys(HINDI_PHRASES).sort((a, b) => b.length - a.length);
+function hindi(value) {
+  let text = String(value);
+  text = text.replace(/You earn ৳5 once when a customer who joined through your link completes their first order of at least ৳([0-9.]+)\./g,
+    (_, amount) => `आपके लिंक से आए ग्राहक का कम से कम ৳${amount} का पहला योग्य ऑर्डर पूरा होने पर आपको एक बार ৳5 मिलेंगे।`);
+  const protectedValues = [];
+  text = text.replace(/https?:\/\/[^\s]+|@[A-Za-z0-9_]+/g, value => { protectedValues.push(value); return `\uE000${protectedValues.length - 1}\uE001`; });
+  // One pass prevents replacing translated text a second time.
+  const pattern = new RegExp(HINDI_KEYS.map(key => key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'g');
+  text = text.replace(pattern, match => HINDI_PHRASES[match]);
+  return text.replace(/\uE000(\d+)\uE001/g, (_, index) => protectedValues[Number(index)]);
+}
+
+function languageOf(id) { const lang = db.users[String(id)]?.language; return ["en", "hi"].includes(lang) ? lang : "bn"; }
+function localized(id, bangla, english) { return languageOf(id) === "hi" ? hindi(english) : languageOf(id) === "en" ? english : bangla; }
 function languagePickerMarkup() {
   return { inline_keyboard: [[
     { text: "বাংলা", callback_data: "language:bn" },
-    { text: "English", callback_data: "language:en" }
+    { text: "English", callback_data: "language:en" },
+    { text: "हिन्दी", callback_data: "language:hi" }
   ]] };
 }
 async function showLanguagePicker(chatId, uid) {
@@ -285,7 +308,7 @@ async function syncOrderStatuses() {
 }
 
 function customerKeyboard(userId) {
-  const en = languageOf(userId) === "en";
+  const en = languageOf(userId) !== "bn";
   const rows = [
     [{ text: en ? "📋 Services" : "📋 সার্ভিস" }, { text: en ? "💰 Balance" : "💰 ব্যালেন্স" }],
     [{ text: en ? "💳 Add Balance" : "💳 ব্যালেন্স যোগ" }, { text: en ? "🛒 New Order" : "🛒 নতুন অর্ডার" }],
@@ -293,6 +316,8 @@ function customerKeyboard(userId) {
     [{ text: en ? "👤 Account Details" : "👤 অ্যাকাউন্ট তথ্য" }],
     [{ text: en ? "🆘 Support" : "🆘 সাপোর্ট" }, { text: "🌐 Language / ভাষা" }]
   ];
+  if (languageOf(userId) === "hi") for (const row of rows) for (const button of row) if (!button.text.includes("Language /")) button.text = hindi(button.text);
+  if (isManager(userId)) rows.push([{ text: localized(userId, "⭐ ম্যানেজার স্পেশাল", "⭐ Manager Specials") }]);
   if (isAdmin(userId)) rows.push([{ text: "⚙️ Admin Panel" }]);
   return { keyboard: rows, resize_keyboard: true, is_persistent: true };
 }
@@ -304,6 +329,7 @@ function adminKeyboard(viewerId) {
   ], resize_keyboard: true, is_persistent: true };
   const rows = [
     [{ text: "📋 Manage Services" }],
+    [{ text: "⭐ Set Manager Price" }],
     [{ text: "➕ Add Service ID" }, { text: "➖ Remove Service ID" }],
     [{ text: "💰 Set Price" }, { text: "⬆️ Increase Price" }],
     [{ text: "⬇️ Decrease Price" }, { text: "💱 USD → BDT" }],
@@ -343,6 +369,13 @@ function normalizeButton(text) {
   const raw = String(text || '').normalize('NFKC').replace(/[\uFE0E\uFE0F]/g, '').trim();
   const clean = raw.replace(/[^\p{L}\p{M}\p{N}]+/gu, ' ').trim().toLowerCase();
   const aliases = {
+    'manager specials': 'manager specials',
+    'ম্যানেজার স্পেশাল': 'manager specials',
+    'मैनेजर विशेष': 'manager specials',
+    'set manager price': 'set manager price',
+    'सेवाएं': 'services', 'बैलेंस': 'balance', 'बैलेंस जोड़ें': 'add balance',
+    'नया ऑर्डर': 'new order', 'मेरे ऑर्डर': 'my orders', 'रेफरल': 'referral',
+    'खाते की जानकारी': 'account details', 'सहायता': 'support',
     'services': 'services',
     'সার্ভিস': 'services',
     'balance': 'balance',
@@ -382,6 +415,34 @@ function normalizeButton(text) {
     'customer menu': 'customer menu'
   };
   return aliases[clean] || clean;
+}
+
+
+function managerPrice(sid) {
+  const value = db.managerPrices[String(sid)];
+  return value !== undefined && Number.isFinite(Number(value)) && Number(value) > 0 ? Number(value) : null;
+}
+async function showManagerSpecials(chatId, uid, page = 0) {
+  if (!isManager(uid)) return bot.sendMessage(chatId, localized(uid, "⛔ শুধু ম্যানেজারদের অনুমতি আছে।", "⛔ Managers only."));
+  if (rateRequired(chatId)) return;
+  try {
+    const services = (await getServices()).filter(service => {
+      const sid = String(service.service ?? service.id);
+      return db.serviceIds.includes(sid) && managerPrice(sid) !== null;
+    });
+    if (!services.length) return bot.sendMessage(chatId, localized(uid, "⭐ এখনো বিশেষ দাম সেট করা হয়নি।", "⭐ No special prices have been set yet."));
+    const pages = Math.ceil(services.length / 50);
+    page = Math.min(Math.max(0, Math.floor(Number(page) || 0)), pages - 1);
+    const buttons = services.slice(page * 50, (page + 1) * 50).map(service => {
+      const sid = String(service.service ?? service.id);
+      return [{ text: `${sid} • ${String(service.name).slice(0, 32)} • ${dualPrice(managerPrice(sid))}/1K`, callback_data: `manager_service:${sid}` }];
+    });
+    const nav = [];
+    if (page > 0) nav.push({ text: localized(uid, "⬅️ আগের পৃষ্ঠা", "⬅️ Previous"), callback_data: `manager_page:${page - 1}` });
+    if (page + 1 < pages) nav.push({ text: localized(uid, "পরের পৃষ্ঠা ➡️", "Next ➡️"), callback_data: `manager_page:${page + 1}` });
+    if (nav.length) buttons.push(nav);
+    return bot.sendMessage(chatId, localized(uid, `⭐ ম্যানেজার স্পেশাল\nসার্ভিস নির্বাচন করে অর্ডার করুন।\n💰 ব্যালেন্স: ৳${money(getBalance(uid))}`, `⭐ Manager Specials\nChoose a service to order.\n💰 Balance: ৳${money(getBalance(uid))}`), { reply_markup: { inline_keyboard: buttons } });
+  } catch (err) { return bot.sendMessage(chatId, localized(uid, "❌ সার্ভিস আনা যায়নি।", "❌ Could not load services.")); }
 }
 
 function selectedServiceInfo(all, serviceId) {
@@ -635,6 +696,11 @@ async function handleAdminAction(id, uid, action) {
     if (!isOwner(uid)) return bot.sendMessage(id, "⛔ শুধু Owner manager পরিচালনা করতে পারবেন।");
     clearState(uid); return showManagers(id);
   }
+  if (action === "set manager price") {
+    setState(uid, { type: "manager_price" });
+    const list = Object.entries(db.managerPrices).map(([id, price]) => `${id}: ৳${money(price)}/1K`).join("\n");
+    return bot.sendMessage(id, `⭐ Manager Price/1K (BDT)\nServiceID Price\nউদাহরণ: 979 100\nবিশেষ দাম সরাতে: 979 remove\n\n${list || 'এখনো সেট করা হয়নি।'}`);
+  }
   if (action === "manage services") return manageServices(id);
   if (action === "add service id") { setState(uid, { type: "add_service" }); return bot.sendMessage(id, "➕ Service ID যোগ করুন।\nএকটি বা একাধিক ID comma/space দিয়ে দিতে পারবেন।\nউদাহরণ: 979,133,2000"); }
   if (action === "remove service id") { setState(uid, { type: "remove_service" }); return bot.sendMessage(id, "➖ যে Service ID বাদ দিতে চান দিন।\nউদাহরণ: 979,133"); }
@@ -766,12 +832,25 @@ bot.on("callback_query", async q => {
   try {
     const uid = q.from.id, chatId = q.message.chat.id, data = String(q.data || "");
     await bot.answerCallbackQuery(q.id);
+    if (data.startsWith("manager_page:")) return showManagerSpecials(chatId, uid, Number(data.split(":")[1]));
+    if (data.startsWith("manager_service:")) {
+      if (!isManager(uid)) return bot.sendMessage(chatId, localized(uid, "⛔ শুধু ম্যানেজারদের অনুমতি আছে।", "⛔ Managers only."));
+      if (rateRequired(chatId)) return;
+      const sid = data.split(":")[1];
+      const price = managerPrice(sid);
+      if (price === null || !db.serviceIds.includes(sid)) return showManagerSpecials(chatId, uid);
+      const service = selectedServiceInfo(await getServices(), sid);
+      if (!service) return bot.sendMessage(chatId, localized(uid, "❌ সার্ভিস পাওয়া যায়নি।", "❌ Service not found."));
+      service.price = price;
+      setState(uid, { type: "order_link", serviceId: sid, service, managerSpecial: true });
+      return bot.sendMessage(chatId, localized(uid, `⭐ ${service.name}\n💰 বিশেষ দাম: ${dualPrice(price)}/1K\n🔢 সর্বনিম্ন: ${service.min} | সর্বোচ্চ: ${service.max}\n\n🔗 Link/Username পাঠান:`, `⭐ ${service.name}\n💰 Special Price: ${dualPrice(price)}/1K\n🔢 Min: ${service.min} | Max: ${service.max}\n\n🔗 Send your link/username:`));
+    }
     if (data.startsWith("language:")) {
       const language = data.slice("language:".length);
-      if (!["bn", "en"].includes(language)) return;
+      if (!["bn", "en", "hi"].includes(language)) return;
       db.users[String(uid)] = { ...(db.users[String(uid)] || { id: uid }), language };
       await saveDb();
-      return bot.sendMessage(chatId, language === "en" ? "✅ Language set to English." : "✅ ভাষা বাংলা করা হয়েছে।", { reply_markup: customerKeyboard(uid) });
+      return bot.sendMessage(chatId, language === "hi" ? "✅ भाषा हिन्दी कर दी गई है।" : language === "en" ? "✅ Language set to English." : "✅ ভাষা বাংলা করা হয়েছে।", { reply_markup: customerKeyboard(uid) });
     }
     if (data === "browse_categories") return sendCustomerServices(chatId);
     if (data.startsWith("browse_cat:")) return showCategoryServices(chatId, data.slice("browse_cat:".length));
@@ -937,7 +1016,7 @@ bot.on('message', async msg => {
 
     if (isAdmin(uid)) {
       const adminActions = new Set(isOwner(uid) ? [
-        'admin panel','manage services','add service id','remove service id','set price',
+        'set manager price','admin panel','manage services','add service id','remove service id','set price',
         'increase price','decrease price','usd bdt','payment numbers','change payment number',
         'payment requests','user count','customer details','customer balance','customer menu','manage managers','manager payment summary','support agents'
       ] : ['admin panel','payment numbers','payment requests','customer menu']);
@@ -948,6 +1027,7 @@ bot.on('message', async msg => {
       }
     }
 
+    if (action === 'manager specials') { clearState(uid); return showManagerSpecials(chatId, uid); }
     if (action === 'services') {
       clearState(uid);
       return await sendCustomerServices(chatId);
@@ -1015,6 +1095,7 @@ bot.on('message', async msg => {
       return;
     }
 
+    if (state?.managerSpecial && (!isManager(uid) || managerPrice(state.serviceId) === null || !db.serviceIds.includes(state.serviceId))) { clearState(uid); return bot.sendMessage(chatId, localized(uid, '⛔ এই বিশেষ অর্ডারের অনুমতি আর নেই।', '⛔ This special order is no longer available.')); }
     if (state?.type === 'order_link') {
       if (!text) return await bot.sendMessage(chatId, localized(uid, '⚠️ একটি Link দিন।', '⚠️ Send a link.'));
       setState(uid, { ...state, type: 'order_quantity', link: text });
@@ -1025,7 +1106,7 @@ bot.on('message', async msg => {
       const min = Number(state.service.min || 0), max = Number(state.service.max || Number.MAX_SAFE_INTEGER);
       if (!Number.isInteger(quantity) || quantity <= 0 || quantity < min || quantity > max) return await bot.sendMessage(chatId, localized(uid, `⚠️ পরিমাণটি সঠিক নয়। সর্বনিম্ন ${min}, সর্বোচ্চ ${max}।`, `⚠️ Invalid quantity. Minimum ${min}, maximum ${max}.`));
       if (rateRequired(chatId)) return;
-      const currentPrice = servicePriceBdt({ ...state.service, service: state.serviceId });
+      const currentPrice = state.managerSpecial ? managerPrice(state.serviceId) : servicePriceBdt({ ...state.service, service: state.serviceId });
       if (!Number.isFinite(currentPrice) || Math.abs(currentPrice - Number(state.service.price)) > 0.005) {
         clearState(uid);
         return await bot.sendMessage(chatId, localized(uid, '⚠️ সার্ভিসের দাম বদলেছে। আবার নতুন অর্ডার থেকে সার্ভিসটি বেছে নিন।', '⚠️ The service price changed. Please start a new order.'));
@@ -1041,7 +1122,7 @@ bot.on('message', async msg => {
         if (result?.error) throw new Error(String(result.error));
         const providerOrderId = result?.order ? String(result.order) : '';
         setBalance(uid, getBalance(uid) - cost);
-        db.orders[orderId] = { id: orderId, userId: uid, serviceId: state.serviceId, serviceName: state.service?.name || `Service ${state.serviceId}`, link: state.link, quantity, cost, status: 'Submitted', providerOrderId, createdAt: new Date().toISOString() };
+        db.orders[orderId] = { id: orderId, userId: uid, serviceId: state.serviceId, serviceName: state.service?.name || `Service ${state.serviceId}`, link: state.link, quantity, cost, status: 'Submitted', providerOrderId, ...(state.managerSpecial ? { managerSpecial: true, pricePer1000: state.service.price } : {}), createdAt: new Date().toISOString() };
         await saveDb(); clearState(uid);
 
         // Notify the owner and all currently active managers.
@@ -1067,6 +1148,21 @@ bot.on('message', async msg => {
       if (!isOwner(uid) && state && state.type !== 'payment_method_set') {
         clearState(uid);
         return bot.sendMessage(chatId, '⛔ Manager access শুধু পেমেন্ট মেথড ও পেমেন্ট রিকোয়েস্টের জন্য।', { reply_markup: adminKeyboard(uid) });
+      }
+      if (state?.type === 'manager_price') {
+        if (!isOwner(uid)) return;
+        const match = text.match(/^(\d+)\s+(remove|\d+(?:\.\d{1,2})?)$/i);
+        if (!match) return bot.sendMessage(chatId, 'ServiceID Price — উদাহরণ: 979 100 / 979 remove');
+        const sid = match[1];
+        if (match[2].toLowerCase() === 'remove') delete db.managerPrices[sid];
+        else {
+          if (!db.serviceIds.includes(sid)) return bot.sendMessage(chatId, '❌ আগে Service ID যোগ করুন।');
+          const price = Number(match[2]);
+          if (!Number.isFinite(price) || price <= 0) return bot.sendMessage(chatId, '⚠️ ০-এর বেশি দাম দিন।');
+          db.managerPrices[sid] = price;
+        }
+        await saveDb(); clearState(uid);
+        return bot.sendMessage(chatId, '✅ Manager price saved.', { reply_markup: adminKeyboard(uid) });
       }
       if (state?.type === 'deduct_balance') {
         if (!isOwner(uid)) { clearState(uid); return bot.sendMessage(chatId, '⛔ শুধু Owner পারবেন।'); }
@@ -1115,7 +1211,7 @@ bot.on('message', async msg => {
       }
       if (state?.type === 'remove_service') {
         const ids = text.split(/[,\s]+/).map(x => x.trim()).filter(Boolean), before = db.serviceIds.length;
-        db.serviceIds = db.serviceIds.filter(x => !ids.includes(x)); ids.forEach(x => delete db.prices[x]);
+        db.serviceIds = db.serviceIds.filter(x => !ids.includes(x)); ids.forEach(x => { delete db.prices[x]; delete db.managerPrices[x]; });
         await saveDb(); clearState(uid);
         return await bot.sendMessage(chatId, `✅ ${before - db.serviceIds.length}টি Service ID বাদ দেওয়া হয়েছে।`, { reply_markup: adminKeyboard(chatId) });
       }

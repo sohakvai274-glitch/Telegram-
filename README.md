@@ -54,3 +54,12 @@ Do not put BOT_TOKEN or SMM_API_KEY in source code. Keep them in Render Environm
 - A payment request goes only to the owner of the selected account. Only that owner/manager can approve or reject it; manager requests cannot be approved by another manager or by the owner.
 - Managers cannot access service/pricing controls, customer history, or manager controls. The owner can view approved and pending payment totals for each manager under `💰 Manager Payment Summary`.
 - Manager accounts, their payment numbers, and payment records are stored in PostgreSQL. Removing a manager stops access; historical collection totals remain in the report.
+
+
+## Added: Hindi and manager special prices
+- Customer language picker now includes বাংলা, English, हिन्दी.
+- Owner: Admin Panel → ⭐ Set Manager Price. Enter `ServiceID Price` in BDT per 1,000, e.g. `979 100`. Remove a special price with `979 remove`. Add the service to the regular service ID list first.
+- All active managers share the special price list. Only managers see ⭐ Manager Specials and can open/order from it. Owner controls prices but does not get manager ordering access.
+- Only services with an explicit special price appear in this list. Regular customer service prices are unchanged.
+- Special orders use the manager's existing BDT wallet and existing order/status workflow. Access and current price are checked again before submission.
+- Manager prices and Hindi language choices persist in the existing PostgreSQL database. Existing records are preserved. Keep the same DATABASE_URL.
